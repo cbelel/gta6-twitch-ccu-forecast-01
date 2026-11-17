@@ -15,11 +15,6 @@ def parse_iso(ts):
 
 def round_2dec(x):
     val = math.floor(x * 100 + 0.5) / 100
-    if abs(val - round(val)) < 1e-9 and abs(val * 100 - round(val * 100)) < 1e-9:
-        if math.isclose(val, round(val), abs_tol=1e-9):
-            if int(round(val)) == val or abs(val - int(val)) < 1e-9:
-                return int(round(val))
-    # Check if whole number
     if math.isclose(val, round(val), abs_tol=1e-9):
         return int(round(val))
     return val
@@ -51,14 +46,19 @@ def process_case(data):
     day_start_str = data.get('day_start')
     day_dt = parse_iso(day_start_str)
     
-    # 1. Anchor on hour 1 (p1)
+    # 1. Anchor on hour 1 (p1) - find row whose "hour" is 1
     p1 = 1.0
     known = data.get('known', [])
-    if known and isinstance(known, list) and len(known) > 0:
-        v = known[0].get('viewers')
-        if v is not None:
-            p1 = max(1.0, float(v))
-    else:
+    hour1_found = False
+    if known and isinstance(known, list):
+        for row in known:
+            if row.get('hour') == 1:
+                v = row.get('viewers')
+                if v is not None:
+                    p1 = max(1.0, float(v))
+                    hour1_found = True
+                    break
+    if not hour1_found:
         history = data.get('history', [])
         if history:
             last_pt = history[-1]
@@ -189,8 +189,8 @@ def process_case(data):
         # Round half up to 2 decimals
         rounded_q = [round_2dec(val) for val in row_q]
         
-        # Clamp min 0.01
-        clamped_q = [max(0.01, q) for q in rounded_q]
+        # Clamp min 0.01 and max 1e9 BEFORE strictly increasing fix
+        clamped_q = [min(1e9, max(0.01, q)) for q in rounded_q]
         
         # Enforce strictly increasing: going left to right, if not greater than previous, raise to previous + 0.01
         final_q = [clamped_q[0]]
@@ -219,7 +219,6 @@ def main():
         os.makedirs(output_dir, exist_ok=True)
         
     if not os.path.exists(input_dir):
-        # If input dir doesn't exist, exit gracefully or do nothing
         return
         
     in_files = sorted([f for f in os.listdir(input_dir) if f.endswith('.in')])
@@ -237,7 +236,6 @@ def main():
             
         result = process_case(data)
         
-        # Compact JSON plus a trailing newline
         json_str = json.dumps(result, separators=(',', ':'))
         output_content = json_str + '\n'
         
